@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NLP File Search</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f13;
+      --surface: #18181f;
+      --surface2: #21212b;
+      --border: #2a2a36;
+      --accent: #7c6af7;
+      --accent-dim: #3d3577;
+      --accent-glow: rgba(124,106,247,0.15);
+      --text: #e8e8f0;
+      --text-muted: #6b6b82;
+      --text-dim: #9898b0;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --radius: 10px;
+      --font: 'Inter', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 0;
+    }
+
+    /* Title bar drag region */
+    .titlebar {
+      -webkit-app-region: drag;
+      height: 38px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .titlebar-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: auto;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+      padding: 20px 24px;
+      gap: 16px;
+    }
+
+    /* Controls row */
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+      flex-shrink: 0;
+    }
+
+    .folder-picker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      flex: 1;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      -webkit-app-region: no-drag;
+    }
+    .folder-picker:hover { border-color: var(--accent); background: var(--surface2); }
+
+    .folder-icon {
+      width: 20px; height: 20px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .folder-text {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .folder-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .folder-path {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .folder-path.placeholder { color: var(--text-muted); font-family: var(--font); }
+
+    /* Search row */
+    .search-row {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .input-wrap {
+      position: relative;
+      flex: 1;
+    }
+    .search-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 11px 14px 11px 42px;
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent); }
+
+    .search-icon {
+      position: absolute;
+      left: 13px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .btn {
+      padding: 11px 22px;
+      border-radius: var(--radius);
+      border: none;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #9180ff;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover:not(:disabled) { background: var(--border); color: var(--text); }
+    .btn-secondary:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Progress */
+    .progress-section {
+      flex-shrink: 0;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .progress-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .progress-count {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 5px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+      border-radius: 99px;
+      transition: width 0.15s ease;
+      width: 0%;
+    }
+    .progress-file {
+      margin-top: 5px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 15px;
+    }
+
+    /* Results panel */
+    .results-panel {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .results-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .results-badge {
+      font-size: 11px;
+      font-family: var(--mono);
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+
+    .results-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .results-body::-webkit-scrollbar { width: 5px; }
+    .results-body::-webkit-scrollbar-track { background: transparent; }
+    .results-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 10px;
+      color: var(--text-muted);
+    }
+    .empty-icon { font-size: 36px; opacity: 0.3; }
+    .empty-text { font-size: 13px; }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 7px;
+      margin-bottom: 4px;
+      background: var(--surface2);
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+      animation: slideIn 0.2s ease;
+    }
+    .result-item:hover { border-color: var(--accent-dim); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .result-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .result-ext {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      background: var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Status bar */
+    .statusbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 6px 0;
+      flex-shrink: 0;
+    }
+    .status-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .status-dot.green { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .status-dot.yellow { background: var(--yellow); }
+    .status-dot.red { background: var(--red); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="titlebar-title">🔍 NLP File Search</span>
+  </div>
+
+  <div class="main">
+    <!-- Folder + Controls -->
+    <div class="controls">
+      <div class="folder-picker" id="folderPicker">
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+        </svg>
+        <div class="folder-text">
+          <span class="folder-label">Folder</span>
+          <span class="folder-path placeholder" id="folderPathDisplay">Click to select a folder…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-row">
+      <div class="input-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input
+          class="search-input"
+          id="queryInput"
+          type="text"
+          placeholder="Enter a keyword or phrase to search…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <button class="btn btn-primary" id="searchBtn" disabled>Search</button>
+      <button class="btn btn-secondary" id="stopBtn" disabled>Stop</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section">
+      <div class="progress-header">
+        <span class="progress-label" id="progressLabel">Ready</span>
+        <span class="progress-count" id="progressCount"></span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+      <div class="progress-file" id="progressFile"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-panel">
+      <div class="results-header">
+        <span class="results-title">Matching Files</span>
+        <span class="results-badge" id="resultsBadge">0 found</span>
+      </div>
+      <div class="results-body" id="resultsBody">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📂</div>
+          <div class="empty-text">Select a folder and enter a search phrase</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="statusbar">
+      <div class="status-chip">
+        <div class="status-dot green"></div>
+        <span>Fully Offline</span>
+      </div>
+      <div class="status-chip">
+        <div class="status-dot" id="nlpDot"></div>
+        <span id="nlpStatus">NLP Ready</span>
+      </div>
+      <div class="status-chip" id="fileCountChip" style="margin-left:auto">
+        <span id="fileCountStatus"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>
